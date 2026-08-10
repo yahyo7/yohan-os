@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Env & secrets — never commit real tokens
+.env
+infra/.env
+!infra/.env.example
+
+# uv
+# (uv.lock IS committed on purpose — it pins the whole workspace)
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# Runtime artifacts
+*.log

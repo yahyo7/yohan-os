@@ -1,0 +1,44 @@
+# Local dependencies for Yohan. Phase 0 only *needs* Redis (the bus), but we
+# start Postgres now so it's ready for the Phase 1 traces table and LangGraph
+# checkpointer without a second setup pass.
+#
+#   docker compose -f infra/docker-compose.yml --env-file infra/.env up -d
+#
+name: yohan
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: yohan-redis
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]  # persist the streams
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  postgres:
+    # pgvector image = Postgres 16 + the vector extension, for Phase 1 memory.
+    image: pgvector/pgvector:pg16
+    container_name: yohan-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-yohan}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-yohan}
+      POSTGRES_DB: ${POSTGRES_DB:-yohan}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-yohan}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  redis-data:
+  postgres-data:
