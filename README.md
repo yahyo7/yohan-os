@@ -14,6 +14,7 @@ gateway relays results to the originating channel.
 ```
 apps/gateway         FastAPI: Telegram webhook, dispatcher, results relay
 apps/trace_writer    persists every bus event to Postgres (Phase 1)
+apps/dashboard-mvp   throwaway Streamlit view over traces (Phase 1, retired in Phase 5)
 packages/core        the contract — event schema, bus client, db + traces store
 packages/agents      worker agents; Phase 0 ships `echo`
 infra                docker-compose (redis + postgres), migrations, .env.example
@@ -110,10 +111,21 @@ docker exec yohan-postgres psql -U yohan -d yohan -c \
 Inserts are idempotent on `(stream, entry_id)`, so the bus's at-least-once
 delivery yields exactly-once rows.
 
+## Dashboard (Phase 1 MVP)
+
+A read-only Streamlit view over the traces table — live totals, an event-type
+breakdown, recent commands, and a per-command event timeline. It reads Postgres
+only (never the bus), so it can't perturb what it observes. Disposable; the
+Next.js + React Flow dashboard replaces it in Phase 5.
+
+```bash
+scripts/run_dashboard.sh       # http://127.0.0.1:8501, auto-refreshes every 2s
+```
+
 ## What's next
 
-- **Phase 1 (remaining)** — Streamlit dashboard subscribing to the bus,
-  structured logging, LangGraph Postgres checkpointer.
+- **Phase 1 (remaining)** — structured logging with `trace_id`, LangGraph
+  Postgres checkpointer (deferred to Phase 2's first stateful agent).
 - **Phase 2** — email-triage agent + approval gates.
 
 See `PROJECT_BRIEF.md` for the full plan.

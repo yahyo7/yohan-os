@@ -1,0 +1,17 @@
+[project]
+name = "yohan-dashboard-mvp"
+version = "0.0.0"
+description = "Throwaway Streamlit dashboard over the traces table (Phase 1, retired in Phase 5)."
+requires-python = ">=3.12"
+dependencies = [
+    "yohan-core",
+    "streamlit>=1.37",   # st.fragment(run_every=...) for live refresh
+    "pandas>=2.0",       # streamlit dataframes/charts
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/yohan_dashboard_mvp"]
