@@ -28,7 +28,15 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Header, HTTPException, Request
 
-from yohan_core import Bus, Event, EventType, get_settings, new_trace_id
+from yohan_core import (
+    Bus,
+    Event,
+    EventType,
+    bind_trace_id,
+    configure_logging,
+    get_settings,
+    new_trace_id,
+)
 
 from yohan_gateway.config import get_gateway_settings
 from yohan_gateway.router import route
@@ -43,6 +51,7 @@ _RESULTS_GROUP = "grp:gateway"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Own the bus connection and the results-relay task for the app's lifetime."""
+    configure_logging("gateway")
     settings = get_settings()
     bus = Bus(settings)
     await bus.connect()
@@ -77,19 +86,21 @@ async def _results_relay(bus: Bus) -> None:
         settings.results_stream, _RESULTS_GROUP, "gateway-relay"
     ):
         event = message.event
-        try:
-            if event.event_type is EventType.OUTPUT_PRODUCED:
-                reply_to = event.payload.get("reply_to", {})
-                chat_id = reply_to.get("chat_id")
-                if chat_id is not None:
-                    await send_message(
-                        gw.telegram_api_base,
-                        chat_id,
-                        event.payload.get("reply", ""),
-                        reply_to_message_id=reply_to.get("message_id"),
-                    )
-        finally:
-            await bus.ack(message, _RESULTS_GROUP)
+        with bind_trace_id(event.trace_id):
+            try:
+                if event.event_type is EventType.OUTPUT_PRODUCED:
+                    reply_to = event.payload.get("reply_to", {})
+                    chat_id = reply_to.get("chat_id")
+                    if chat_id is not None:
+                        await send_message(
+                            gw.telegram_api_base,
+                            chat_id,
+                            event.payload.get("reply", ""),
+                            reply_to_message_id=reply_to.get("message_id"),
+                        )
+                        logger.info("relayed reply to chat %s", chat_id)
+            finally:
+                await bus.ack(message, _RESULTS_GROUP)
 
 
 app = FastAPI(title="Yohan Gateway", version="0.0.0", lifespan=lifespan)
@@ -148,10 +159,11 @@ async def telegram_webhook(
             },
         },
     )
-    await bus.publish(settings.agent_stream(agent_type), command)
-    # Mirror the entry event onto the results stream so the (Phase 1) trace writer
-    # records the whole lifecycle, not just what agents emit. The relay ignores
-    # non-output events, so this costs the reply path nothing.
-    await bus.publish_result(command)
-    logger.info("routed trace %s -> %s", trace_id, agent_type)
+    with bind_trace_id(trace_id):
+        await bus.publish(settings.agent_stream(agent_type), command)
+        # Mirror the entry event onto the results stream so the (Phase 1) trace
+        # writer records the whole lifecycle, not just what agents emit. The relay
+        # ignores non-output events, so this costs the reply path nothing.
+        await bus.publish_result(command)
+        logger.info("routed to %s", agent_type, extra={"agent_type": agent_type})
     return {"ok": True, "trace_id": trace_id}

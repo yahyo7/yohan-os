@@ -12,9 +12,8 @@ Run it as a process:  ``python -m yohan_agents.echo.agent``
 from __future__ import annotations
 
 import asyncio
-import logging
 
-from yohan_core import Event
+from yohan_core import Event, configure_logging
 
 from yohan_agents.base import BaseAgent
 
@@ -34,10 +33,7 @@ class EchoAgent(BaseAgent):
 
 
 def main() -> None:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s %(message)s",
-    )
+    configure_logging("agent:echo")
     asyncio.run(EchoAgent().run())
 
 

@@ -14,7 +14,15 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from yohan_core import Bus, Database, apply_schema, get_settings, insert_event
+from yohan_core import (
+    Bus,
+    Database,
+    apply_schema,
+    bind_trace_id,
+    configure_logging,
+    get_settings,
+    insert_event,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -34,25 +42,26 @@ async def run() -> None:
         async for message in bus.consume(
             settings.results_stream, _GROUP, "trace-writer"
         ):
-            # Persist first...
-            await insert_event(
-                db.pool,
-                message.event,
-                stream=message.stream,
-                entry_id=message.entry_id,
-            )
-            # ...then ack. Crash in between => redelivery => idempotent no-op.
-            await bus.ack(message, _GROUP)
+            with bind_trace_id(message.event.trace_id):
+                # Persist first...
+                await insert_event(
+                    db.pool,
+                    message.event,
+                    stream=message.stream,
+                    entry_id=message.entry_id,
+                )
+                # ...then ack. Crash in between => redelivery => idempotent no-op.
+                await bus.ack(message, _GROUP)
+                logger.debug(
+                    "persisted %s", message.event.event_type.value
+                )
     finally:
         await bus.aclose()
         await db.aclose()
 
 
 def main() -> None:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s %(message)s",
-    )
+    configure_logging("trace_writer")
     asyncio.run(run())
 
 

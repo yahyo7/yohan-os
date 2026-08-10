@@ -9,6 +9,7 @@ from yohan_core.bus import Bus, BusMessage
 from yohan_core.db import Database
 from yohan_core.events import Event, EventType
 from yohan_core.ids import new_agent_id, new_trace_id
+from yohan_core.logging import bind_trace_id, configure_logging, get_trace_id
 from yohan_core.settings import CoreSettings, get_settings
 from yohan_core.traces import apply_schema, insert_event
 
@@ -22,6 +23,9 @@ __all__ = [
     "get_settings",
     "new_agent_id",
     "new_trace_id",
+    "bind_trace_id",
+    "configure_logging",
+    "get_trace_id",
     "apply_schema",
     "insert_event",
 ]

@@ -22,7 +22,14 @@ import logging
 import time
 from dataclasses import dataclass
 
-from yohan_core import Bus, Event, EventType, get_settings, new_agent_id
+from yohan_core import (
+    Bus,
+    Event,
+    EventType,
+    bind_trace_id,
+    get_settings,
+    new_agent_id,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -91,37 +98,47 @@ class BaseAgent(abc.ABC):
         """Run one command under the budget clock, emitting lifecycle events."""
         trace_id = command.trace_id
         agent_id = self._consumer
-        await self._emit(trace_id, agent_id, EventType.TASK_STARTED, {})
+        # Bind the trace_id for the whole handler: every log line from handle()
+        # and every emitted event below inherits it automatically.
+        with bind_trace_id(trace_id):
+            await self._emit(trace_id, agent_id, EventType.TASK_STARTED, {})
+            logger.info("task started", extra={"agent_type": self.agent_type})
 
-        started = time.monotonic()
-        try:
-            output = await asyncio.wait_for(
-                self.handle(command), timeout=self.budget.max_seconds
-            )
-        except asyncio.TimeoutError:
-            # Wall-clock cap is a hard stop — a budget breach, not a crash.
+            started = time.monotonic()
+            try:
+                output = await asyncio.wait_for(
+                    self.handle(command), timeout=self.budget.max_seconds
+                )
+            except asyncio.TimeoutError:
+                # Wall-clock cap is a hard stop — a budget breach, not a crash.
+                logger.warning(
+                    "budget exceeded: max_seconds=%s", self.budget.max_seconds
+                )
+                await self._emit(
+                    trace_id,
+                    agent_id,
+                    EventType.BUDGET_EXCEEDED,
+                    {"limit": "max_seconds", "value": self.budget.max_seconds},
+                )
+                return
+            except Exception as exc:  # noqa: BLE001 — surface any failure as an event.
+                logger.exception("agent %s failed", self.agent_type)
+                await self._emit(
+                    trace_id, agent_id, EventType.TASK_FAILED, {"error": str(exc)}
+                )
+                return
+
+            elapsed = time.monotonic() - started
+            await self._emit(trace_id, agent_id, EventType.OUTPUT_PRODUCED, output)
             await self._emit(
                 trace_id,
                 agent_id,
-                EventType.BUDGET_EXCEEDED,
-                {"limit": "max_seconds", "value": self.budget.max_seconds},
+                EventType.TASK_COMPLETED,
+                {"elapsed_seconds": round(elapsed, 3)},
             )
-            return
-        except Exception as exc:  # noqa: BLE001 — surface any failure as an event.
-            logger.exception("agent %s failed on %s", self.agent_type, trace_id)
-            await self._emit(
-                trace_id, agent_id, EventType.TASK_FAILED, {"error": str(exc)}
+            logger.info(
+                "task completed", extra={"elapsed_seconds": round(elapsed, 3)}
             )
-            return
-
-        elapsed = time.monotonic() - started
-        await self._emit(trace_id, agent_id, EventType.OUTPUT_PRODUCED, output)
-        await self._emit(
-            trace_id,
-            agent_id,
-            EventType.TASK_COMPLETED,
-            {"elapsed_seconds": round(elapsed, 3)},
-        )
 
     async def _emit(
         self, trace_id: str, agent_id: str, event_type: EventType, payload: dict

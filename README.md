@@ -122,10 +122,26 @@ Next.js + React Flow dashboard replaces it in Phase 5.
 scripts/run_dashboard.sh       # http://127.0.0.1:8501, auto-refreshes every 2s
 ```
 
+## Structured logging (Phase 1)
+
+Every process configures JSON logging via `configure_logging(service)`. Each line
+is one JSON object — `service`, `level`, `logger`, `msg`, `ts` — enriched with
+`trace_id` whenever one is bound. The trace id rides a `ContextVar`, so the
+consume loop / webhook handler binds it once per command and every log line
+beneath inherits it (third-party logs like `httpx` included). This is the log
+half of the brief's rule that `trace_id` propagates through every event, log,
+and DB row.
+
+```json
+{"ts":"…","level":"INFO","service":"agent:echo","logger":"yohan_agents.base","msg":"task completed","trace_id":"trc_…","elapsed_seconds":0.001}
+```
+
+Grep one command across every process with its `trace_id`.
+
 ## What's next
 
-- **Phase 1 (remaining)** — structured logging with `trace_id`, LangGraph
-  Postgres checkpointer (deferred to Phase 2's first stateful agent).
+- **Phase 1 (remaining)** — LangGraph Postgres checkpointer, deferred to Phase 2's
+  first stateful agent (wiring it before then would be scaffolding with no user).
 - **Phase 2** — email-triage agent + approval gates.
 
 See `PROJECT_BRIEF.md` for the full plan.
