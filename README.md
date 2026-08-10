@@ -13,9 +13,10 @@ gateway relays results to the originating channel.
 
 ```
 apps/gateway         FastAPI: Telegram webhook, dispatcher, results relay
-packages/core        the contract — event schema, bus client, shared settings
+apps/trace_writer    persists every bus event to Postgres (Phase 1)
+packages/core        the contract — event schema, bus client, db + traces store
 packages/agents      worker agents; Phase 0 ships `echo`
-infra                docker-compose (redis + postgres) + .env.example
+infra                docker-compose (redis + postgres), migrations, .env.example
 scripts              bootstrap / run / webhook helpers
 ```
 
@@ -86,11 +87,33 @@ cloudflared tunnel create yohan
 # then run:  cloudflared tunnel run yohan
 ```
 
+## Traces (Phase 1)
+
+Every event on the bus is persisted to the Postgres `traces` table by a single
+subscriber, `apps/trace_writer` — which joins the results stream as its own
+consumer group (`grp:tracewriter`), independent of the gateway relay. Both see
+every event; neither disturbs the other. Adding it required no change to the
+gateway or agents.
+
+```bash
+scripts/run_trace_writer.sh    # applies the schema on startup, then persists events
+```
+
+Inspect a run's full causal chain:
+
+```bash
+docker exec yohan-postgres psql -U yohan -d yohan -c \
+  "SELECT event_type, agent_id, payload->>'reply' FROM traces \
+   WHERE trace_id = '<trace_id>' ORDER BY id;"
+```
+
+Inserts are idempotent on `(stream, entry_id)`, so the bus's at-least-once
+delivery yields exactly-once rows.
+
 ## What's next
 
-- **Phase 1** — `traces` table + a writer subscriber (second consumer group on
-  the results stream), Streamlit dashboard, structured logging, LangGraph
-  Postgres checkpointer.
+- **Phase 1 (remaining)** — Streamlit dashboard subscribing to the bus,
+  structured logging, LangGraph Postgres checkpointer.
 - **Phase 2** — email-triage agent + approval gates.
 
 See `PROJECT_BRIEF.md` for the full plan.

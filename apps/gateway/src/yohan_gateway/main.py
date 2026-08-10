@@ -149,5 +149,9 @@ async def telegram_webhook(
         },
     )
     await bus.publish(settings.agent_stream(agent_type), command)
+    # Mirror the entry event onto the results stream so the (Phase 1) trace writer
+    # records the whole lifecycle, not just what agents emit. The relay ignores
+    # non-output events, so this costs the reply path nothing.
+    await bus.publish_result(command)
     logger.info("routed trace %s -> %s", trace_id, agent_type)
     return {"ok": True, "trace_id": trace_id}
