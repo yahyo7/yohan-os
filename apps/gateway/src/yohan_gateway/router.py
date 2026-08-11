@@ -9,10 +9,19 @@ never changes when the classifier lands.
 
 from __future__ import annotations
 
-# Phase 0: everything goes to echo. Phase 3 replaces this body with a classifier.
+# Phase 3 replaces this keyword table with the llama3.2:3b classifier.
 DEFAULT_AGENT = "echo"
+
+# Cheap keyword routing until the classifier lands.
+_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "email_triage": ("email", "inbox", "triage", "unread"),
+}
 
 
 def route(text: str) -> str:
     """Return the agent_type that should handle this command's text."""
+    lowered = text.lower()
+    for agent_type, keywords in _KEYWORDS.items():
+        if any(k in lowered for k in keywords):
+            return agent_type
     return DEFAULT_AGENT

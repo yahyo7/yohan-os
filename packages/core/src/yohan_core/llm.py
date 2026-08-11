@@ -38,6 +38,8 @@ async def complete(
     role: Role = "worker",
     temperature: float = 0.0,
     max_tokens: int = 1024,
+    timeout: float = 60.0,
+    num_retries: int = 0,
     **kwargs,
 ) -> str:
     """Run a chat completion for the given role; return the message text.
@@ -45,6 +47,10 @@ async def complete(
     ``messages`` is the OpenAI-style list of ``{"role", "content"}`` dicts that
     LiteLLM normalizes across providers. For Ollama models we pass the configured
     ``api_base``; for Anthropic, LiteLLM reads ``ANTHROPIC_API_KEY`` from the env.
+
+    ``num_retries`` defaults to 0: agents own their own retry/budget semantics,
+    and failing fast lets a caller's fallback (e.g. the triage heuristic) kick in
+    promptly when a local model isn't running.
     """
     import litellm
 
@@ -54,6 +60,8 @@ async def complete(
         "messages": messages,
         "temperature": temperature,
         "max_tokens": max_tokens,
+        "timeout": timeout,
+        "num_retries": num_retries,
         **kwargs,
     }
     if model.startswith("ollama/"):
