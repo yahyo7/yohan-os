@@ -15,6 +15,7 @@ from yohan_core.approvals import (
 )
 from yohan_core.bus import Bus, BusMessage
 from yohan_core.db import Database
+from yohan_core.dispatch import Task, dispatch, new_task_id
 from yohan_core.events import Event, EventType
 from yohan_core.ids import new_agent_id, new_trace_id
 from yohan_core.llm import complete, model_for
@@ -53,4 +54,7 @@ __all__ = [
     "ApprovalDenied",
     "complete",
     "model_for",
+    "Task",
+    "dispatch",
+    "new_task_id",
 ]

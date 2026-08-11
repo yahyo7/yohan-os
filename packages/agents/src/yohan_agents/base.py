@@ -98,10 +98,17 @@ class BaseAgent(abc.ABC):
         """Run one command under the budget clock, emitting lifecycle events."""
         trace_id = command.trace_id
         agent_id = self._consumer
+        # A supervisor-dispatched command carries a task_id; echo it through this
+        # agent's lifecycle events so the dispatcher can correlate results.
+        task_id = command.payload.get("task_id")
+
+        def tagged(payload: dict) -> dict:
+            return {**payload, "task_id": task_id} if task_id else payload
+
         # Bind the trace_id for the whole handler: every log line from handle()
         # and every emitted event below inherits it automatically.
         with bind_trace_id(trace_id):
-            await self._emit(trace_id, agent_id, EventType.TASK_STARTED, {})
+            await self._emit(trace_id, agent_id, EventType.TASK_STARTED, tagged({}))
             logger.info("task started", extra={"agent_type": self.agent_type})
 
             started = time.monotonic()
@@ -118,23 +125,23 @@ class BaseAgent(abc.ABC):
                     trace_id,
                     agent_id,
                     EventType.BUDGET_EXCEEDED,
-                    {"limit": "max_seconds", "value": self.budget.max_seconds},
+                    tagged({"limit": "max_seconds", "value": self.budget.max_seconds}),
                 )
                 return
             except Exception as exc:  # noqa: BLE001 — surface any failure as an event.
                 logger.exception("agent %s failed", self.agent_type)
                 await self._emit(
-                    trace_id, agent_id, EventType.TASK_FAILED, {"error": str(exc)}
+                    trace_id, agent_id, EventType.TASK_FAILED, tagged({"error": str(exc)})
                 )
                 return
 
             elapsed = time.monotonic() - started
-            await self._emit(trace_id, agent_id, EventType.OUTPUT_PRODUCED, output)
+            await self._emit(trace_id, agent_id, EventType.OUTPUT_PRODUCED, tagged(output))
             await self._emit(
                 trace_id,
                 agent_id,
                 EventType.TASK_COMPLETED,
-                {"elapsed_seconds": round(elapsed, 3)},
+                tagged({"elapsed_seconds": round(elapsed, 3)}),
             )
             logger.info(
                 "task completed", extra={"elapsed_seconds": round(elapsed, 3)}
