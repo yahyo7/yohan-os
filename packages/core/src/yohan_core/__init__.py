@@ -17,6 +17,7 @@ from yohan_core.bus import Bus, BusMessage
 from yohan_core.db import Database
 from yohan_core.events import Event, EventType
 from yohan_core.ids import new_agent_id, new_trace_id
+from yohan_core.llm import complete, model_for
 from yohan_core.logging import bind_trace_id, configure_logging, get_trace_id
 from yohan_core.mcp_registry import Registry, ServerSpec, ToolSpec, UnknownTool
 from yohan_core.settings import CoreSettings, get_settings
@@ -50,4 +51,6 @@ __all__ = [
     "UnknownTool",
     "ToolLayer",
     "ApprovalDenied",
+    "complete",
+    "model_for",
 ]

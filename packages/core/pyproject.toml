@@ -10,6 +10,7 @@ dependencies = [
     "asyncpg>=0.29",       # raw async Postgres for the traces store
     "pyyaml>=6.0",         # MCP registry config
     "mcp>=1.2",            # official MCP client SDK (tool layer)
+    "litellm>=1.50",       # the one model-call abstraction (Ollama + Anthropic)
 ]
 
 [build-system]

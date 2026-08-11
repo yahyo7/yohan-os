@@ -24,6 +24,13 @@ class CoreSettings(BaseSettings):
     # --- Postgres (source of truth from Phase 1; unused by Phase 0 code) ---
     postgres_dsn: str = "postgresql://yohan:yohan@localhost:5432/yohan"
 
+    # --- Models (all calls go through LiteLLM; see yohan_core.llm) ---
+    # Agents ask for a role, not a model id, so swapping models is config-only.
+    llm_classifier_model: str = "ollama/llama3.2:3b"   # fast router/classifier
+    llm_worker_model: str = "ollama/qwen2.5:14b"       # default worker
+    llm_reasoner_model: str = "anthropic/claude-sonnet-5"  # hard reasoning
+    ollama_api_base: str = "http://localhost:11434"
+
     # --- Stream naming ---
     # One Redis stream per agent type. The gateway XADDs the command onto the
     # stream for the chosen agent; that agent's consumer group reads it.
