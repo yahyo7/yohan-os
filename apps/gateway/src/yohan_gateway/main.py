@@ -28,8 +28,11 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Header, HTTPException, Request
 
+from fastapi.middleware.cors import CORSMiddleware
+
 from yohan_core import (
     Bus,
+    Database,
     Event,
     EventType,
     bind_trace_id,
@@ -38,6 +41,8 @@ from yohan_core import (
     new_trace_id,
     publish_decision,
 )
+
+from yohan_gateway.dashboard_api import router as dashboard_router
 
 from yohan_gateway.config import get_gateway_settings
 from yohan_gateway.router import route
@@ -63,7 +68,10 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     bus = Bus(settings)
     await bus.connect()
+    db = Database(settings)
+    await db.connect()  # dashboard API reads the traces store
     app.state.bus = bus
+    app.state.db = db
     app.state.settings = settings
     # request_id -> {trace_id, chat_id, message_id} for approval buttons in flight.
     # In-memory is fine for a single-user gateway; a restart mid-approval just
@@ -83,6 +91,7 @@ async def lifespan(app: FastAPI):
         except asyncio.CancelledError:
             pass
         await bus.aclose()
+        await db.aclose()
         logger.info("gateway down")
 
 
@@ -178,6 +187,15 @@ async def _handle_callback(gw, callback) -> None:
 
 
 app = FastAPI(title="Yohan Gateway", version="0.0.0", lifespan=lifespan)
+
+# The Next.js dashboard runs on :3000 and calls this API cross-origin.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+app.include_router(dashboard_router)
 
 
 @app.get("/health")

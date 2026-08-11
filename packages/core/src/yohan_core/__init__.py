@@ -21,6 +21,12 @@ from yohan_core.ids import new_agent_id, new_trace_id
 from yohan_core.llm import complete, model_for
 from yohan_core.logging import bind_trace_id, configure_logging, get_trace_id
 from yohan_core.mcp_registry import Registry, ServerSpec, ToolSpec, UnknownTool
+from yohan_core.queries import (
+    coerce_json_fields,
+    pending_approvals,
+    recent_traces,
+    trace_events,
+)
 from yohan_core.settings import CoreSettings, get_settings
 from yohan_core.skills import Skill, available_skills, load_skill
 from yohan_core.tool_layer import ApprovalDenied, ToolLayer
@@ -61,4 +67,8 @@ __all__ = [
     "Skill",
     "load_skill",
     "available_skills",
+    "recent_traces",
+    "trace_events",
+    "pending_approvals",
+    "coerce_json_fields",
 ]
