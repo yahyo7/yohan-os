@@ -12,12 +12,14 @@ gateway relays results to the originating channel.
 ## Layout
 
 ```
-apps/gateway         FastAPI: Telegram webhook, dispatcher, results relay
+apps/gateway         FastAPI: Telegram webhook, dispatcher, relay, dashboard API
 apps/trace_writer    persists every bus event to Postgres (Phase 1)
-apps/dashboard-mvp   throwaway Streamlit view over traces (Phase 1, retired in Phase 5)
-packages/core        the contract — event schema, bus client, db + traces store
-packages/agents      worker agents; Phase 0 ships `echo`
-infra                docker-compose (redis + postgres), migrations, .env.example
+apps/scheduler       cron-on-bus: fires scheduled commands (Phase 3)
+apps/dashboard       Next.js: live DAG, SSE feed, approvals, history (Phase 5)
+packages/core        the contract — events, bus, db/traces, tools, llm, skills
+packages/agents      worker agents (echo, email_triage, daily_briefing, supervisor)
+packages/skills      SKILL.md prompt templates (Phase 4)
+infra                docker-compose, migrations, mcp_registry, schedules, .env.example
 scripts              bootstrap / run / webhook helpers
 ```
 
@@ -111,15 +113,17 @@ docker exec yohan-postgres psql -U yohan -d yohan -c \
 Inserts are idempotent on `(stream, entry_id)`, so the bus's at-least-once
 delivery yields exactly-once rows.
 
-## Dashboard (Phase 1 MVP)
+## Dashboard (Phase 5)
 
-A read-only Streamlit view over the traces table — live totals, an event-type
-breakdown, recent commands, and a per-command event timeline. It reads Postgres
-only (never the bus), so it can't perturb what it observes. Disposable; the
-Next.js + React Flow dashboard replaces it in Phase 5.
+A Next.js 15 dashboard (`apps/dashboard`, Tailwind + React Flow) over the
+gateway's SSE + REST API: a live event feed (SSE), a React Flow **DAG** of any
+selected trace (the root spine fans out into one lane per parallel task), the
+history list, and a pending-approvals panel with Approve/Reject. `● live`
+reflects the SSE connection. (The Phase 1 Streamlit MVP was retired here.)
 
 ```bash
-scripts/run_dashboard.sh       # http://127.0.0.1:8501, auto-refreshes every 2s
+scripts/run_gateway.sh         # serves the API on :8000
+scripts/run_dashboard.sh       # Next.js on http://localhost:3000
 ```
 
 ## Structured logging (Phase 1)
@@ -197,8 +201,8 @@ loaded dynamically — no agent ships a hardcoded list.
 
 ## What's next
 
-- **Phase 5** — Next.js + React Flow dashboard (retires Streamlit).
-- **Phase 6** — voice (Whisper) + devops / code-review agents.
+- **Phase 6** — voice (Whisper transcription for Telegram notes) + devops /
+  code-review agents.
 - Deferred: LangGraph Postgres checkpointer (lands with the first agent whose path
   isn't predictable); a pinned long-lived MCP session (tool layer is per-call now).
 
