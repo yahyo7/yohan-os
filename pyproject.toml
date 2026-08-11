@@ -9,6 +9,8 @@ dependencies = []
 [tool.uv.workspace]
 # Every app and package resolves against this single lockfile.
 members = ["apps/*", "packages/*"]
+# packages/skills holds SKILL.md data (loaded at runtime), not a Python package.
+exclude = ["packages/skills"]
 
 [tool.uv.sources]
 # Internal packages are always taken from the workspace, never PyPI.

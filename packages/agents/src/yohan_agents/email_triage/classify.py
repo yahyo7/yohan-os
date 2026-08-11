@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 from typing import Literal
 
-from yohan_core import complete
+from yohan_core import complete, load_skill
 
 logger = logging.getLogger(__name__)
 
@@ -39,15 +39,15 @@ def heuristic_category(subject: str, sender: str, snippet: str) -> Category:
 
 
 async def classify(subject: str, sender: str, snippet: str) -> Category:
-    """Classify one email; fall back to heuristics if the model call fails."""
-    prompt = (
-        "Classify this email into exactly one label: needs_reply, fyi, or spam.\n"
-        f"From: {sender}\nSubject: {subject}\nSnippet: {snippet}\n"
-        "Answer with only the label."
-    )
+    """Classify one email; fall back to heuristics if the model call fails.
+
+    The prompt comes from the ``triage_classify`` skill, loaded at runtime.
+    """
+    skill = load_skill("triage_classify")
+    prompt = skill.render(sender=sender, subject=subject, snippet=snippet)
     try:
         out = (await complete(
-            [{"role": "user", "content": prompt}], role="classifier", max_tokens=8
+            [{"role": "user", "content": prompt}], role=skill.model_role, max_tokens=8
         )).strip().lower()
         for category in CATEGORIES:
             if category in out:
@@ -60,15 +60,15 @@ async def classify(subject: str, sender: str, snippet: str) -> Category:
 
 
 async def draft_reply(subject: str, sender: str, body: str) -> str:
-    """Draft a short reply; fall back to a safe template if the model is down."""
-    prompt = (
-        "Write a brief, polite reply to this email. Keep it under 120 words. "
-        "Do not invent facts or commitments.\n\n"
-        f"From: {sender}\nSubject: {subject}\n\n{body}"
-    )
+    """Draft a short reply; fall back to a safe template if the model is down.
+
+    The prompt comes from the ``triage_draft`` skill, loaded at runtime.
+    """
+    skill = load_skill("triage_draft")
+    prompt = skill.render(sender=sender, subject=subject, body=body)
     try:
         return (await complete(
-            [{"role": "user", "content": prompt}], role="worker", max_tokens=300
+            [{"role": "user", "content": prompt}], role=skill.model_role, max_tokens=300
         )).strip()
     except Exception:  # noqa: BLE001
         logger.warning("draft model unavailable; using template fallback")

@@ -181,10 +181,24 @@ scripts/run_scheduler.sh
 Dispatch shares the parent `trace_id` across the fan-out, with a `task_id` per
 branch, so a multi-agent command stays one causal chain.
 
+## Skills (Phase 4)
+
+Agent prompts aren't hardcoded — they're **skills** loaded at runtime from
+`packages/skills/<name>/SKILL.md` (YAML frontmatter: name, description,
+model_role; body is a `{placeholder}` prompt template). Edit or version a prompt
+without touching Python.
+
+- `triage_classify`, `triage_draft` — used by the email-triage agent.
+- `morning_briefing` — used by the daily-briefing agent to compose sections.
+
+`yohan_core.load_skill(name)` loads one; `available_skills()` discovers them.
+Combined with the MCP registry (tools) from Phase 2, both tools and skills are
+loaded dynamically — no agent ships a hardcoded list.
+
 ## What's next
 
-- **Phase 4** — formalize the tool layer (MCP registry + skills, dynamic loading).
 - **Phase 5** — Next.js + React Flow dashboard (retires Streamlit).
+- **Phase 6** — voice (Whisper) + devops / code-review agents.
 - Deferred: LangGraph Postgres checkpointer (lands with the first agent whose path
   isn't predictable); a pinned long-lived MCP session (tool layer is per-call now).
 

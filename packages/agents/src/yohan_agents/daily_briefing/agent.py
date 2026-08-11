@@ -13,7 +13,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from yohan_core import Event, ToolLayer, configure_logging
+from yohan_core import Event, ToolLayer, complete, configure_logging, load_skill
 
 from yohan_agents.base import BaseAgent
 from yohan_agents.gmail_util import parse_search
@@ -40,8 +40,24 @@ class DailyBriefingAgent(BaseAgent):
                 self._calendar_section(),
             )
 
-        briefing = "🌅 *Daily briefing*\n\n" + "\n\n".join([email, github, calendar])
+        briefing = await self._compose(email, github, calendar)
         return {"reply": briefing, "reply_to": reply_to}
+
+    async def _compose(self, email: str, github: str, calendar: str) -> str:
+        """Compose the sections into a briefing via the morning_briefing skill;
+        fall back to the raw sections when no model is available."""
+        header = "🌅 *Daily briefing*\n\n"
+        skill = load_skill("morning_briefing")
+        prompt = skill.render(email=email, github=github, calendar=calendar)
+        try:
+            composed = (await complete(
+                [{"role": "user", "content": prompt}], role=skill.model_role, max_tokens=400
+            )).strip()
+            if composed:
+                return header + composed
+        except Exception:  # noqa: BLE001
+            logger.warning("briefing compose model unavailable; using raw sections")
+        return header + "\n\n".join([email, github, calendar])
 
     async def _email_section(self, tools: ToolLayer, trace_id: str) -> str:
         try:

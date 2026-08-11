@@ -22,6 +22,7 @@ from yohan_core.llm import complete, model_for
 from yohan_core.logging import bind_trace_id, configure_logging, get_trace_id
 from yohan_core.mcp_registry import Registry, ServerSpec, ToolSpec, UnknownTool
 from yohan_core.settings import CoreSettings, get_settings
+from yohan_core.skills import Skill, available_skills, load_skill
 from yohan_core.tool_layer import ApprovalDenied, ToolLayer
 from yohan_core.traces import apply_schema, insert_event
 
@@ -57,4 +58,7 @@ __all__ = [
     "Task",
     "dispatch",
     "new_task_id",
+    "Skill",
+    "load_skill",
+    "available_skills",
 ]
