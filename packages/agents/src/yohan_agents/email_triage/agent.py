@@ -13,15 +13,15 @@ Run as a process:  ``python -m yohan_agents.email_triage.agent``
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
-from typing import Any
 
 from yohan_core import Event, ToolLayer, configure_logging
 from yohan_core.tool_layer import ApprovalDenied
 
 from yohan_agents.base import BaseAgent
 from yohan_agents.email_triage.classify import classify, draft_reply
+from yohan_agents.gmail_util import parse_body as _parse_body
+from yohan_agents.gmail_util import parse_search as _parse_search
 
 logger = logging.getLogger(__name__)
 
@@ -95,51 +95,6 @@ def _format_summary(c: dict) -> str:
     if c["denied"]:
         line += f" {c['denied']} declined."
     return line
-
-
-def _extract(obj: Any) -> Any:
-    """Normalize an MCP tool result to plain Python.
-
-    A stubbed transport returns Python objects directly; the real ``mcp`` SDK
-    returns a ``CallToolResult`` whose ``.content`` is a list of text parts, which
-    we JSON-decode. The exact Gmail MCP output shape may need adjusting once live
-    OAuth is wired — parsing is centralized here for that reason.
-    """
-    content = getattr(obj, "content", None)
-    if content is None:
-        return obj
-    for part in content:
-        text = getattr(part, "text", None)
-        if text is not None:
-            try:
-                return json.loads(text)
-            except (ValueError, TypeError):
-                return text
-    return content
-
-
-def _parse_search(result: Any) -> list[dict]:
-    data = _extract(result)
-    if isinstance(data, dict):
-        data = data.get("messages") or data.get("emails") or []
-    emails = []
-    for m in data or []:
-        emails.append(
-            {
-                "id": m.get("id") or m.get("message_id") or m.get("threadId"),
-                "subject": m.get("subject", "(no subject)"),
-                "from": m.get("from") or m.get("sender", ""),
-                "snippet": m.get("snippet", ""),
-            }
-        )
-    return [e for e in emails if e["id"]]
-
-
-def _parse_body(result: Any) -> str:
-    data = _extract(result)
-    if isinstance(data, dict):
-        return data.get("body") or data.get("snippet") or ""
-    return str(data)
 
 
 def main() -> None:

@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import logging
 import os
-from contextlib import AsyncExitStack
 from typing import Any
 
 from yohan_core.approvals import request_and_wait
@@ -50,8 +49,6 @@ class ToolLayer:
         self._bus = bus
         self._agent_id = agent_id
         self._registry = registry or Registry.load()
-        self._stack = AsyncExitStack()
-        self._sessions: dict[str, Any] = {}
 
     async def __aenter__(self) -> "ToolLayer":
         return self
@@ -60,8 +57,8 @@ class ToolLayer:
         await self.aclose()
 
     async def aclose(self) -> None:
-        await self._stack.aclose()
-        self._sessions.clear()
+        # Sessions are per-call (see _invoke), so there's nothing to tear down.
+        return None
 
     async def call(
         self,
@@ -105,15 +102,14 @@ class ToolLayer:
     async def _invoke(self, server: str, tool: str, arguments: dict) -> Any:
         """Invoke the tool over stdio via the official MCP SDK.
 
-        Sessions are cached per server for the layer's lifetime, so we don't
-        respawn the server subprocess on every call.
+        A fresh session per call, opened and closed inside *this* task. The MCP
+        SDK's stdio_client / ClientSession use anyio cancel scopes that must be
+        entered and exited in the same task — caching a session across calls (and
+        across asyncio.gather children, as the briefing does) violates that and
+        crashes on teardown. Per-call respawns the server subprocess, which is the
+        correct-but-slower trade; a future optimization can pin one long-lived
+        session to a dedicated task and funnel calls to it.
         """
-        session = await self._session(server)
-        return await session.call_tool(tool, arguments)
-
-    async def _session(self, server: str) -> Any:
-        if server in self._sessions:
-            return self._sessions[server]
         spec = self._registry.server(server)
         # Lazy import so core doesn't hard-depend on the SDK at import time.
         from mcp import ClientSession, StdioServerParameters
@@ -124,11 +120,10 @@ class ToolLayer:
             args=spec.args,
             env={**os.environ, **spec.env} if spec.env else None,
         )
-        read, write = await self._stack.enter_async_context(stdio_client(params))
-        session = await self._stack.enter_async_context(ClientSession(read, write))
-        await session.initialize()
-        self._sessions[server] = session
-        return session
+        async with stdio_client(params) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                return await session.call_tool(tool, arguments)
 
     async def _emit(self, trace_id: str, event_type: EventType, payload: dict) -> None:
         await self._bus.publish_result(

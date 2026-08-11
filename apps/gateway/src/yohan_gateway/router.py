@@ -15,6 +15,8 @@ DEFAULT_AGENT = "echo"
 # Cheap keyword routing until the classifier lands.
 _KEYWORDS: dict[str, tuple[str, ...]] = {
     "email_triage": ("email", "inbox", "triage", "unread"),
+    # Orchestrated / multi-agent commands go to the supervisor.
+    "supervisor": ("morning", "briefing", "routine", "daily", "fanout"),
 }
 
 
