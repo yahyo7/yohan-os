@@ -14,7 +14,7 @@ from typing import Any
 
 import asyncpg
 
-from yohan_core import get_settings
+from yohan_core import Bus, get_settings, publish_decision
 
 
 async def _fetch(sql: str, *args: Any) -> list[asyncpg.Record]:
@@ -76,6 +76,48 @@ def recent_traces(limit: int = 25) -> list[dict]:
         """,
         limit,
     )
+
+
+def pending_approvals() -> list[dict]:
+    """Approval requests with no decision yet — the dashboard's action queue."""
+    return fetch(
+        """
+        SELECT
+            trace_id,
+            payload->>'request_id'            AS request_id,
+            payload->>'action'                AS action,
+            payload->'detail'->'arguments'    AS arguments,
+            event_ts
+        FROM traces
+        WHERE event_type = 'approval_requested'
+          AND payload->>'request_id' NOT IN (
+              SELECT payload->>'request_id'
+              FROM traces
+              WHERE event_type IN ('approval_granted', 'approval_denied')
+          )
+        ORDER BY event_ts DESC
+        """
+    )
+
+
+def decide(request_id: str, trace_id: str, granted: bool) -> None:
+    """Publish an approval decision from the dashboard (opens a short-lived Bus)."""
+
+    async def _go() -> None:
+        bus = Bus()
+        await bus.connect()
+        try:
+            await publish_decision(
+                bus,
+                request_id=request_id,
+                trace_id=trace_id,
+                granted=granted,
+                decided_by="dashboard",
+            )
+        finally:
+            await bus.aclose()
+
+    asyncio.run(_go())
 
 
 def events_for_trace(trace_id: str) -> list[dict]:

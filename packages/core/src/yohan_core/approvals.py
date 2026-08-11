@@ -131,14 +131,19 @@ async def publish_decision(
     granted: bool,
     decided_by: str,
 ) -> None:
-    """Emit a decision onto the approvals stream (called by gateway / dashboard)."""
+    """Emit a decision onto the approvals stream (called by gateway / dashboard).
+
+    Also mirrored onto the results stream so the trace writer persists it and the
+    dashboard can tell which requests are still pending — same pattern as the
+    gateway mirroring command_received. The waiting agent reads the approvals
+    stream; tracing/observers read results.
+    """
     event_type = EventType.APPROVAL_GRANTED if granted else EventType.APPROVAL_DENIED
-    await bus.publish(
-        get_settings().approvals_stream,
-        Event(
-            trace_id=trace_id,
-            agent_id=decided_by,
-            event_type=event_type,
-            payload={"request_id": request_id, "decided_by": decided_by, "granted": granted},
-        ),
+    event = Event(
+        trace_id=trace_id,
+        agent_id=decided_by,
+        event_type=event_type,
+        payload={"request_id": request_id, "decided_by": decided_by, "granted": granted},
     )
+    await bus.publish(get_settings().approvals_stream, event)
+    await bus.publish_result(event)

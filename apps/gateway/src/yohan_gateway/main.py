@@ -36,11 +36,19 @@ from yohan_core import (
     configure_logging,
     get_settings,
     new_trace_id,
+    publish_decision,
 )
 
 from yohan_gateway.config import get_gateway_settings
 from yohan_gateway.router import route
-from yohan_gateway.telegram import parse_update, send_message
+from yohan_gateway.telegram import (
+    answer_callback_query,
+    approval_keyboard,
+    edit_message_text,
+    parse_callback,
+    parse_update,
+    send_message,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -57,8 +65,14 @@ async def lifespan(app: FastAPI):
     await bus.connect()
     app.state.bus = bus
     app.state.settings = settings
+    # request_id -> {trace_id, chat_id, message_id} for approval buttons in flight.
+    # In-memory is fine for a single-user gateway; a restart mid-approval just
+    # means the button's decision is published without the original trace_id.
+    app.state.pending_approvals = {}
 
-    relay = asyncio.create_task(_results_relay(bus), name="results-relay")
+    relay = asyncio.create_task(
+        _results_relay(bus, app.state.pending_approvals), name="results-relay"
+    )
     logger.info("gateway up; results relay started")
     try:
         yield
@@ -72,13 +86,12 @@ async def lifespan(app: FastAPI):
         logger.info("gateway down")
 
 
-async def _results_relay(bus: Bus) -> None:
-    """Consume the results stream and deliver replies back to Telegram.
+async def _results_relay(bus: Bus, pending: dict) -> None:
+    """Consume the results stream and drive Telegram output.
 
-    Runs for the life of the process. Only ``output_produced`` events carry a
-    user-facing reply; every other lifecycle event (task_started, task_completed,
-    …) is acked and ignored here — those are for the dashboard/trace writer in
-    later phases.
+    Two event types matter here: ``output_produced`` (deliver the reply) and
+    ``approval_requested`` (prompt the user with Approve/Reject buttons). Every
+    other lifecycle event is acked and ignored — those are for the trace writer.
     """
     settings = get_settings()
     gw = get_gateway_settings()
@@ -99,8 +112,69 @@ async def _results_relay(bus: Bus) -> None:
                             reply_to_message_id=reply_to.get("message_id"),
                         )
                         logger.info("relayed reply to chat %s", chat_id)
+                elif event.event_type is EventType.APPROVAL_REQUESTED:
+                    await _prompt_approval(gw, event, pending)
             finally:
                 await bus.ack(message, _RESULTS_GROUP)
+
+
+async def _prompt_approval(gw, event: Event, pending: dict) -> None:
+    """Send an Approve/Reject prompt to Telegram for one approval request."""
+    payload = event.payload
+    request_id = payload.get("request_id")
+    reply_to = payload.get("reply_to", {})
+    chat_id = reply_to.get("chat_id")
+    if request_id is None or chat_id is None:
+        return
+    pending[request_id] = {"trace_id": event.trace_id, "chat_id": chat_id}
+    await send_message(
+        gw.telegram_api_base,
+        chat_id,
+        _format_approval(payload),
+        reply_markup=approval_keyboard(request_id),
+    )
+    logger.info("prompted approval %s to chat %s", request_id, chat_id)
+
+
+def _format_approval(payload: dict) -> str:
+    """Human-readable approval prompt from the request payload."""
+    action = payload.get("action", "action")
+    detail = payload.get("detail", {})
+    args = detail.get("arguments", {})
+    if action == "gmail.send_email":
+        body = str(args.get("body", ""))
+        preview = body if len(body) <= 300 else body[:300] + "…"
+        return (
+            f"🔐 Approve sending this email?\n"
+            f"To: {args.get('to', '')}\n"
+            f"Subject: {args.get('subject', '')}\n\n{preview}"
+        )
+    return f"🔐 Approve {action}?\n{args}"
+
+
+async def _handle_callback(gw, callback) -> None:
+    """Turn an Approve/Reject tap into an approval decision on the bus."""
+    bus: Bus = app.state.bus
+    pending: dict = app.state.pending_approvals
+    context = pending.pop(callback.request_id, {})
+    trace_id = context.get("trace_id", "")
+
+    with bind_trace_id(trace_id or "unknown"):
+        await publish_decision(
+            bus,
+            request_id=callback.request_id,
+            trace_id=trace_id,
+            granted=callback.granted,
+            decided_by="telegram",
+        )
+        verdict = "approved ✅" if callback.granted else "rejected ❌"
+        await answer_callback_query(gw.telegram_api_base, callback.callback_query_id, verdict)
+        # Replace the prompt so the buttons can't be tapped twice.
+        await edit_message_text(
+            gw.telegram_api_base, callback.chat_id, callback.message_id,
+            f"Decision recorded: {verdict}",
+        )
+        logger.info("approval %s %s", callback.request_id, verdict)
 
 
 app = FastAPI(title="Yohan Gateway", version="0.0.0", lifespan=lifespan)
@@ -129,6 +203,13 @@ async def telegram_webhook(
         raise HTTPException(status_code=403, detail="bad webhook secret")
 
     update = await request.json()
+
+    # An inline-button tap (approve/reject) rather than a message?
+    callback = parse_callback(update)
+    if callback is not None:
+        await _handle_callback(gw, callback)
+        return {"ok": True}
+
     inbound = parse_update(update)
     if inbound is None:
         return {"ok": True}  # nothing we handle; ack so Telegram stops retrying.

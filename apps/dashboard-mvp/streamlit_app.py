@@ -16,6 +16,37 @@ import streamlit as st
 
 from yohan_dashboard_mvp import queries
 
+
+def _approvals_panel() -> None:
+    """Pending approvals with Approve / Reject buttons."""
+    pending = queries.pending_approvals()
+    if not pending:
+        return
+    st.subheader(f"⏳ Pending approvals ({len(pending)})")
+    for item in pending:
+        rid = item["request_id"]
+        args = item["arguments"]
+        if isinstance(args, str):
+            try:
+                args = json.loads(args)
+            except (ValueError, TypeError):
+                args = {}
+        args = args or {}
+        with st.container(border=True):
+            st.markdown(f"**{item['action']}**")
+            if item["action"] == "gmail.send_email":
+                st.caption(f"To: {args.get('to','')} · Subject: {args.get('subject','')}")
+                st.text((args.get("body", "") or "")[:400])
+            else:
+                st.write(args)
+            approve, reject, _ = st.columns([1, 1, 4])
+            if approve.button("✅ Approve", key=f"ok_{rid}"):
+                queries.decide(rid, item["trace_id"], True)
+                st.rerun()
+            if reject.button("❌ Reject", key=f"no_{rid}"):
+                queries.decide(rid, item["trace_id"], False)
+                st.rerun()
+
 st.set_page_config(page_title="Yohan", page_icon="🛰️", layout="wide")
 
 
@@ -41,6 +72,9 @@ def live_view() -> None:
     c2.metric("Events", totals["events"])
     c3.metric("Failed", totals["failed"])
     c4.metric("Budget exceeded", totals["budget_exceeded"])
+
+    # Action queue first — this is where the human is in the loop.
+    _approvals_panel()
 
     left, right = st.columns([2, 1])
 

@@ -138,10 +138,33 @@ and DB row.
 
 Grep one command across every process with its `trace_id`.
 
+## Email triage + approvals (Phase 2)
+
+The first real agent. `apps/gateway` routes email/inbox/triage/unread commands to
+the email-triage agent, which runs a fixed workflow — search unread → read →
+classify → draft → send. `gmail.send_email` is gated in `infra/mcp_registry.yaml`,
+so a send parks on an approval event; the drafted reply is shown and only a grant
+lets it through.
+
+Approve/reject from either channel:
+- **Telegram** — inline ✅/❌ buttons on the prompt; a tap publishes the decision.
+- **Streamlit** — a "Pending approvals" panel at the top of the dashboard.
+
+Both publish to the approvals stream; the parked agent resolves and continues.
+
+```bash
+scripts/run_email_triage.sh    # the agent (needs Gmail MCP OAuth for live Gmail)
+```
+
+Going live needs two things this repo can't do for you: authorize the Gmail MCP
+server (`npx @gongrzhe/server-gmail-autoauth-mcp auth`) and run Ollama (or set
+`ANTHROPIC_API_KEY`) for real classification. Without them the pipeline still
+runs — classification falls back to heuristics.
+
 ## What's next
 
-- **Phase 1 (remaining)** — LangGraph Postgres checkpointer, deferred to Phase 2's
-  first stateful agent (wiring it before then would be scaffolding with no user).
-- **Phase 2** — email-triage agent + approval gates.
+- **Phase 3** — supervisor graph dispatching agents in parallel, daily-briefing
+  agent, cron-on-bus scheduler. Deferred still: the LangGraph Postgres
+  checkpointer (lands with the first agent whose path isn't predictable).
 
 See `PROJECT_BRIEF.md` for the full plan.
