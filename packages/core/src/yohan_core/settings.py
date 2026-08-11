@@ -31,6 +31,11 @@ class CoreSettings(BaseSettings):
     # Where agents publish results/events back for the gateway (and, later, the
     # trace writer) to consume.
     results_stream: str = "yohan:stream:results"
+    # Approval decisions (granted/denied) flow here, published by the gateway
+    # (Telegram buttons) and the dashboard. Agents waiting on a gate tail this
+    # stream. It's separate from results because it needs broadcast semantics —
+    # every waiting agent must see every decision and filter for its own.
+    approvals_stream: str = "yohan:stream:approvals"
 
     def agent_stream(self, agent_type: str) -> str:
         """Stream name that a given agent type consumes commands from."""

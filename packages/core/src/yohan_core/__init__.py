@@ -5,6 +5,14 @@ dependency graph: events define the wire format, bus wraps Redis Streams, and
 settings/ids are the small shared primitives everyone needs.
 """
 
+from yohan_core.approvals import (
+    Decision,
+    new_request_id,
+    publish_decision,
+    request_and_wait,
+    request_approval,
+    wait_for_decision,
+)
 from yohan_core.bus import Bus, BusMessage
 from yohan_core.db import Database
 from yohan_core.events import Event, EventType
@@ -28,4 +36,10 @@ __all__ = [
     "get_trace_id",
     "apply_schema",
     "insert_event",
+    "Decision",
+    "new_request_id",
+    "publish_decision",
+    "request_and_wait",
+    "request_approval",
+    "wait_for_decision",
 ]

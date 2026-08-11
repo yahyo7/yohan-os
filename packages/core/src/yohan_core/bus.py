@@ -154,3 +154,38 @@ class Bus:
     async def ack(self, message: BusMessage, group: str) -> None:
         """Acknowledge a handled message, removing it from the pending list."""
         await self._client.xack(message.stream, group, message.entry_id)
+
+    # --- broadcast tailing (no consumer group) --------------------------
+
+    async def tail(
+        self, stream: str, *, start: str = "$", block_ms: int = 5000
+    ) -> AsyncIterator[BusMessage]:
+        """Yield entries from ``start`` onward with plain XREAD (no group).
+
+        Unlike :meth:`consume`, this is broadcast: every caller keeps its own
+        cursor and sees *every* entry — nothing is load-balanced away. That's what
+        approval waiters need, since each parked agent must see every decision and
+        filter for the one addressed to it. ``start="$"`` means "only entries added
+        after this call", so a waiter won't match stale decisions.
+        """
+        last = start
+        while True:
+            try:
+                response = await self._client.xread(
+                    streams={stream: last}, block=block_ms
+                )
+            except RedisTimeoutError:
+                continue
+            except RedisConnectionError:
+                await asyncio.sleep(1.0)
+                continue
+            if not response:
+                continue
+            for _stream_name, entries in response:
+                for entry_id, fields in entries:
+                    last = entry_id
+                    yield BusMessage(
+                        stream=stream,
+                        entry_id=entry_id,
+                        event=Event.from_wire(fields),
+                    )
