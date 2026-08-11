@@ -9,8 +9,10 @@ dependencies = []
 [tool.uv.workspace]
 # Every app and package resolves against this single lockfile.
 members = ["apps/*", "packages/*"]
-# packages/skills holds SKILL.md data (loaded at runtime), not a Python package.
-exclude = ["packages/skills"]
+# Non-Python members that the globs would otherwise catch:
+#   packages/skills — SKILL.md data (loaded at runtime)
+#   apps/dashboard  — the Next.js frontend (pnpm, not uv)
+exclude = ["packages/skills", "apps/dashboard"]
 
 [tool.uv.sources]
 # Internal packages are always taken from the workspace, never PyPI.
