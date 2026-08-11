@@ -1,0 +1,15 @@
+# Cron-on-bus schedule. The scheduler (apps/scheduler) publishes each job's
+# command onto the bus at its cron time — exactly as if it had arrived from a
+# channel — so scheduled work flows through the same agents and traces as
+# interactive commands.
+#
+# cron is standard 5-field (min hour dom mon dow), evaluated in each job's tz.
+# chat_id is where the reply is delivered (your Telegram chat id); 0 = unset.
+
+jobs:
+  - name: daily-briefing
+    cron: "0 7 * * *"        # 07:00 daily
+    tz: Asia/Seoul           # KST
+    agent: supervisor        # supervisor plans "morning briefing" → daily_briefing
+    text: "morning briefing"
+    chat_id: 0
