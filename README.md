@@ -161,10 +161,31 @@ server (`npx @gongrzhe/server-gmail-autoauth-mcp auth`) and run Ollama (or set
 `ANTHROPIC_API_KEY`) for real classification. Without them the pipeline still
 runs — classification falls back to heuristics.
 
+## Multi-agent dispatch (Phase 3)
+
+- **Supervisor** (`yohan_agents.supervisor`) plans a command into parallel tasks
+  and fans them out via `yohan_core.dispatch`, aggregating results into one reply.
+  `morning`/`briefing`/`fanout` route here.
+- **Daily briefing** (`yohan_agents.daily_briefing`) gathers email/GitHub/calendar
+  sections concurrently, each degrading gracefully when its source isn't connected.
+- **Scheduler** (`apps/scheduler`, cron-on-bus) publishes scheduled commands onto
+  the bus — same path as interactive commands. `infra/schedules.yaml` drives it
+  (07:00 KST briefing by default; set your `chat_id`).
+
+```bash
+scripts/run_supervisor.sh
+scripts/run_daily_briefing.sh
+scripts/run_scheduler.sh
+```
+
+Dispatch shares the parent `trace_id` across the fan-out, with a `task_id` per
+branch, so a multi-agent command stays one causal chain.
+
 ## What's next
 
-- **Phase 3** — supervisor graph dispatching agents in parallel, daily-briefing
-  agent, cron-on-bus scheduler. Deferred still: the LangGraph Postgres
-  checkpointer (lands with the first agent whose path isn't predictable).
+- **Phase 4** — formalize the tool layer (MCP registry + skills, dynamic loading).
+- **Phase 5** — Next.js + React Flow dashboard (retires Streamlit).
+- Deferred: LangGraph Postgres checkpointer (lands with the first agent whose path
+  isn't predictable); a pinned long-lived MCP session (tool layer is per-call now).
 
 See `PROJECT_BRIEF.md` for the full plan.
