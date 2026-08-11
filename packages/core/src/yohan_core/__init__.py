@@ -18,7 +18,9 @@ from yohan_core.db import Database
 from yohan_core.events import Event, EventType
 from yohan_core.ids import new_agent_id, new_trace_id
 from yohan_core.logging import bind_trace_id, configure_logging, get_trace_id
+from yohan_core.mcp_registry import Registry, ServerSpec, ToolSpec, UnknownTool
 from yohan_core.settings import CoreSettings, get_settings
+from yohan_core.tool_layer import ApprovalDenied, ToolLayer
 from yohan_core.traces import apply_schema, insert_event
 
 __all__ = [
@@ -42,4 +44,10 @@ __all__ = [
     "request_and_wait",
     "request_approval",
     "wait_for_decision",
+    "Registry",
+    "ServerSpec",
+    "ToolSpec",
+    "UnknownTool",
+    "ToolLayer",
+    "ApprovalDenied",
 ]

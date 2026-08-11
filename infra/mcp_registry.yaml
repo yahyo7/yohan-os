@@ -1,0 +1,32 @@
+# MCP registry — the single source of truth for which tools exist and which ones
+# require human approval. The tool layer (yohan_core.tool_layer) reads this and
+# enforces `requires_approval` at the boundary: a tool marked true cannot execute
+# until an approval event clears it. This is the brief's non-negotiable —
+# approval is per-tool and enforced at the tool layer, not by hoping a prompt holds.
+#
+# `command`/`args`/`env` describe how to launch each MCP server over stdio via the
+# official `mcp` Python SDK client.
+
+servers:
+  gmail:
+    transport: stdio
+    # The official Gmail MCP server (OAuth via Google). One-time setup required:
+    #   npx @gongrzhe/server-gmail-autoauth-mcp auth
+    # which opens a browser, does the Google OAuth consent, and caches a token.
+    # Until that's done, live Gmail calls will fail — the rest of the pipeline
+    # (classify, draft, approval gate) still runs.
+    command: npx
+    args: ["-y", "@gongrzhe/server-gmail-autoauth-mcp"]
+    env: {}
+    tools:
+      # read-only: no approval needed
+      search_emails:
+        requires_approval: false
+      read_email:
+        requires_approval: false
+      # drafting is safe — it doesn't leave the account
+      draft_email:
+        requires_approval: false
+      # side-effectful: NEVER without explicit approval
+      send_email:
+        requires_approval: true
